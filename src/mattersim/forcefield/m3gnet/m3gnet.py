@@ -46,6 +46,7 @@ class M3Gnet(nn.Module):
             MainBlock(max_n, max_l, cutoff, units, max_n, threebody_cutoff)
             for i in range(num_blocks)
         ]
+        self.embedding_dim = units
         self.graph_conv = nn.ModuleList(module_list)
         self.final = GatedMLP(
             in_dim=units,
@@ -56,6 +57,7 @@ class M3Gnet(nn.Module):
         self.atom_embedding = MLP(
             in_dim=max_z + 1, out_dims=[units], activation=None, use_bias=False
         )
+        self.embedding_dim = units
         self.atom_embedding.apply(self.init_weights_uniform)
         self.normalizer = AtomScaling(verbose=False, max_z=max_z)
         self.max_z = max_z
@@ -73,6 +75,7 @@ class M3Gnet(nn.Module):
     def forward(
         self,
         input: Dict[str, torch.Tensor],
+        output_embedding: bool = False,
         dataset_idx: int = -1,
     ) -> torch.Tensor:
         # Exact data from input_dictionary
@@ -138,6 +141,9 @@ class M3Gnet(nn.Module):
                 num_triple_ij,
                 num_atoms,
             )
+        
+        if output_embedding:
+            return atom_attr
 
         energies_i = self.final(atom_attr).view(-1)  # [batch_size*num_atoms]
         energies_i = self.normalizer(energies_i, atomic_numbers)

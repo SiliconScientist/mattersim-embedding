@@ -2,6 +2,7 @@
 """
 Potential
 """
+
 import os
 import pickle
 import random
@@ -71,7 +72,9 @@ class Potential(nn.Module):
             step_size = kwargs.get("step_size", 10)
             gamma = kwargs.get("gamma", 0.95)
             self.scheduler = StepLR(
-                self.optimizer, step_size=step_size, gamma=gamma  # noqa: E501
+                self.optimizer,
+                step_size=step_size,
+                gamma=gamma,  # noqa: E501
             )
         elif scheduler == "ReduceLROnPlateau":
             factor = kwargs.get("factor", 0.8)
@@ -97,7 +100,8 @@ class Potential(nn.Module):
             self.ema = ema
         self.model_name = kwargs.get("model_name", "m3gnet")
         self.validation_metrics = kwargs.get(
-            "validation_metrics", {"loss": 10000000.0}  # noqa: E501
+            "validation_metrics",
+            {"loss": 10000000.0},  # noqa: E501
         )
         self.last_epoch = kwargs.get("last_epoch", -1)
         self.description = kwargs.get("description", "")
@@ -259,9 +263,7 @@ class Potential(nn.Module):
                     atoms_train_sampler = (
                         torch.utils.data.distributed.DistributedSampler(
                             train_data,
-                            seed=kwargs.get("seed", 42)
-                            + idx * 131
-                            + epoch,  # noqa: E501
+                            seed=kwargs.get("seed", 42) + idx * 131 + epoch,  # noqa: E501
                         )
                     )
                     train_dataloader = DataLoader(
@@ -384,9 +386,7 @@ class Potential(nn.Module):
                 if (
                     save_checkpoint is True
                     and metric[self.idx]
-                    < best_model["validation_metrics"][
-                        self.saved_name[self.idx]
-                    ]  # noqa: E501
+                    < best_model["validation_metrics"][self.saved_name[self.idx]]  # noqa: E501
                 ):
                     self.save(os.path.join(save_path, "best_model.pth"))
                 if epoch > best_model["last_epoch"] + early_stop_patience:
@@ -584,7 +584,9 @@ class Potential(nn.Module):
                 self.optimizer.zero_grad()
                 loss_.backward()
                 nn.utils.clip_grad_norm_(
-                    self.model.parameters(), 1.0, norm_type=2  # noqa: E501
+                    self.model.parameters(),
+                    1.0,
+                    norm_type=2,  # noqa: E501
                 )
                 self.optimizer.step()
                 # scaler.scale(loss_).backward()
@@ -728,6 +730,7 @@ class Potential(nn.Module):
         include_forces: bool = True,
         include_stresses: bool = True,
         dataset_idx: int = -1,
+        output_embedding: bool = False,
     ) -> Dict[str, torch.Tensor]:
         """
         get energy, force and stress from a list of graph
@@ -765,9 +768,11 @@ class Potential(nn.Module):
                     (torch.eye(3, device=self.device)[None, ...] + strain_augment),
                 )
                 volume = torch.linalg.det(input["cell"])
-
-            energies = self.model.forward(input, dataset_idx)
-            output["total_energy"] = energies
+            if output_embedding:
+                return self.model.forward(input, dataset_idx, output_embedding)
+            else:
+                energies = self.model.forward(input, dataset_idx)
+                output["total_energy"] = energies
 
             # Only take first derivative if only force is required
             if include_forces is True and include_stresses is False:
@@ -853,6 +858,7 @@ class Potential(nn.Module):
         model_name: str = "m3gnet",
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         load_training_state: bool = True,
+        output_embedding: bool = False,
         **kwargs,
     ):
         if model_name.lower() != "m3gnet":
@@ -897,7 +903,9 @@ class Potential(nn.Module):
 
         assert checkpoint["model_name"] == model_name
         checkpoint["model_args"].update(kwargs)
-        model = M3Gnet(device=device, **checkpoint["model_args"]).to(device)
+        model = M3Gnet(
+            device=device, **checkpoint["model_args"], output_embedding=output_embedding
+        ).to(device)
         model.load_state_dict(checkpoint["model"], strict=False)
 
         if load_training_state:
